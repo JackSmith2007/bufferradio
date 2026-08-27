@@ -38,9 +38,16 @@ python -m bufferradio                                # interactive station picke
   for its duration, never a crash.
 - `stations.py` — preset name -> master URL dict + terminal picker. Only
   verified-working URLs may be added.
-- `faults.py` (M3) — pressing `f` drops all HTTP requests for N s (default 5).
-- `metrics.py` (M3) — appends events to `metrics.csv`
-  (`timestamp,event_type,sequence,duration_ms`); summary line on exit.
+- `faults.py` — `FaultInjector` + `FaultyTransport` (httpx transport wrapper
+  that raises `ConnectError` while tripped, so nothing else knows about
+  faults) + key-listener thread: `f` drops all HTTP for `--fault-seconds`
+  (default 5), `q` quits via `_thread.interrupt_main()`.
+- `metrics.py` — `Metrics(path)` appends `timestamp,event_type,sequence,
+  duration_ms` rows (stored/played/gap/skip/playlist_error/fault) to
+  `metrics.csv`; summary line on exit. `Metrics(None)` = counts only (tests).
+- `tests/` — pytest, no network: fetcher tests run against a `FakeServer`
+  over `httpx.MockTransport`; player tests use a fake stream and monkeypatch
+  `decode`; the two real-ffmpeg decode tests skip when ffmpeg is absent.
 
 ## Decisions log
 
@@ -51,14 +58,25 @@ python -m bufferradio                                # interactive station picke
   handling stays trivial.
 - Preset streams verified 2026-08-26; playlist windows are short (~28-30 s),
   so delays much above ~25 s exceed what the server retains (M2 warns).
+- Eviction is done by the player right after it plays a segment; the buffer
+  keeps the eviction point as a floor so `register()` ignores anything older
+  (no re-downloading played audio). Startup evicts everything before the
+  chosen start sequence for the same reason.
+- Player skip-ahead: if its position was never listed but newer segments
+  are, the outage outlasted the server window; jump to the oldest listed.
+- Player writes PCM in 0.25 s chunks and aborts the stream on stop. A
+  whole-segment write made shutdown `join(5)` time out and the process
+  exited inside PortAudio (exit code 0xC0000374, heap corruption).
+- Fetcher is `poll_once()` (playlist + download missing) inside the
+  `run_fetcher()` backoff loop, so tests exercise one poll at a time.
 - M5 (optional, after M4): thin Tkinter GUI (dropdown of presets + custom URL
   box) reusing the same core; no new dependencies.
 
 ## Conventions
 
 - Dependencies: only httpx, m3u8, sounddevice (pinned in requirements.txt).
-  Any addition must be justified to the user first. (pytest proposed as
-  dev-only for M4 in requirements-dev.txt.)
+  Any addition must be justified to the user first. pytest is dev-only
+  (requirements-dev.txt). Run tests with `python -m pytest`.
 - Type hints, small functions, no over-engineering; brief comments only where
   logic is non-obvious.
 - Milestones M1-M4 (see git history), one at a time, user approval between
@@ -71,4 +89,5 @@ python -m bufferradio                                # interactive station picke
 - M2: backfill hardening, eviction, playlist-window warning. **Done.**
 - M3: fault injector (`f` key) + metrics.csv. **Done** (verified: 5 s
   outage at 20 s delay recovers with zero gaps).
-- M4: unit tests (fake fetcher, no network) + README. Not started.
+- M4: unit tests (fake fetcher, no network) + README. **Done** (35 tests,
+  <1 s, `python -m pytest`).

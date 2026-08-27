@@ -55,10 +55,12 @@ class Player(threading.Thread):
     sleep-based timing is needed.
     """
 
-    def __init__(self, buffer: SegmentBuffer, start_seq: int, metrics: Metrics) -> None:
+    def __init__(self, buffer: SegmentBuffer, start_seq: int, metrics: Metrics,
+                 grace_s: float = DATA_GRACE_S) -> None:
         super().__init__(name="player", daemon=True)
         self._buffer = buffer
         self._metrics = metrics
+        self._grace_s = grace_s
         self.pos = start_seq
         self._stop = threading.Event()
 
@@ -119,7 +121,7 @@ class Player(threading.Thread):
                     self.pos = oldest
                     continue
                 waited = 0.0  # not listed yet: we are at the live edge, keep waiting
-            elif waited >= DATA_GRACE_S:
+            elif waited >= self._grace_s:
                 return seg  # listed but bytes never arrived: caller plays silence
             self._stop.wait(POLL_S)
             waited += POLL_S
