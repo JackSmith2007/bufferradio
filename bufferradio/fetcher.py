@@ -84,7 +84,9 @@ async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: Segment
                       metrics: Metrics) -> None:
     """Poll forever, with exponential backoff while the playlist is unreachable."""
     backoff = 1.0
+    failures = 0
     while True:
+        stored_before = metrics.counts["stored"]
         try:
             playlist = await poll_once(client, media_url, buffer, metrics)
         except (httpx.HTTPError, OSError) as exc:
@@ -92,7 +94,12 @@ async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: Segment
             metrics.record("playlist_error", duration_ms=backoff * 1000)
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, MAX_BACKOFF_S)
+            failures += 1
             continue
+        if failures:
+            log.info("network back after %d failed poll(s); backfilled %d segment(s)",
+                     failures, metrics.counts["stored"] - stored_before)
+            failures = 0
         backoff = 1.0
         target = playlist.target_duration or DEFAULT_TARGET_DURATION
         await asyncio.sleep(target / 2)

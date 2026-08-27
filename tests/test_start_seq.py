@@ -1,7 +1,7 @@
 import m3u8
 import pytest
 
-from bufferradio.__main__ import choose_start_seq
+from bufferradio.app import choose_start_seq
 
 # Three 10 s segments, sequences 100-102, so the window is 30 s.
 PLAYLIST = """#EXTM3U

@@ -35,6 +35,13 @@ plays 20 seconds behind live. While it plays:
 | `f` | inject an outage: every network request fails for 5 seconds — the music keeps playing |
 | `q` | quit (a one-line summary is printed) |
 
+**Prefer a web page to a terminal?** Run the launcher with `--web`
+(`start-windows.bat --web` / `./start-mac.command --web`, or
+`bufferradio.exe --web`). It opens http://127.0.0.1:8765 in your browser: a
+station dropdown, a delay box, and Start / Stop / Inject-outage buttons, with
+the live status and log underneath. It is a control panel — the audio still
+plays on the computer running it.
+
 **Windows alternative:** download
 [bufferradio.exe](https://github.com/JackSmith2007/bufferradio/releases/latest/download/bufferradio.exe)
 from the latest release — a single file with Python and ffmpeg inside, no
@@ -55,6 +62,7 @@ bufferradio.exe --station fip --delay 25          (the exe)
 | --- | --- |
 | `--station NAME` | play a preset (`cbc-radio2`, `cbc-radio1-toronto`, `fip`, `france-inter`, `franceinfo`) |
 | `--url URL` | play any HLS master or media playlist |
+| `--web` | control playback from a page at http://127.0.0.1:8765 instead of the terminal |
 | `--delay S` | seconds behind live (default 20) |
 | `--fault-seconds S` | length of the outage injected by the `f` key (default 5) |
 | `--metrics-file PATH` | CSV to append events to (default `metrics.csv`) |
@@ -184,7 +192,7 @@ Tests and the Windows exe:
 
 ```powershell
 pip install -r requirements-dev.txt      # + pytest, pyinstaller
-python -m pytest                         # 38 tests, <1 s, no network or audio device needed
+python -m pytest                         # 43 tests, a few seconds, no network or audio device needed
 python -m PyInstaller --onefile --name bufferradio --clean run.py   # -> dist\bufferradio.exe
 ```
 
@@ -198,7 +206,9 @@ start-windows.bat   double-click launcher (Windows)
 start-mac.command   double-click launcher (macOS / Linux)
 run.py              entry point for source runs and the PyInstaller exe
 bufferradio/
-  __main__.py       CLI, startup, wiring, shutdown
+  __main__.py       command-line interface
+  app.py            one playback session: open stream, start player, run fetcher
+  web.py            local web front end (--web), stdlib http.server
   fetcher.py        playlist polling + segment download (asyncio, httpx, m3u8)
   buffer.py         SegmentBuffer: thread-safe, keyed by media sequence number
   player.py         playback thread: ffmpeg decode -> sounddevice
