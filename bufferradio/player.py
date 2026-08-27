@@ -80,15 +80,29 @@ class Player(threading.Thread):
             pcm = silence(seg.duration)
         stream.write(pcm)
         self.pos += 1
+        self._buffer.evict_before(self.pos)  # played segments are never needed again
 
     def _wait_for_segment(self) -> Segment | None:
-        """Block until segment self.pos has data, its grace expires, or we stop."""
+        """Block until segment self.pos has data, its grace expires, or we stop.
+
+        An unlisted position normally means we are at the live edge and the
+        server hasn't published it yet. But if *newer* segments are listed
+        and ours never was, the outage outlasted the server's playlist window
+        and our position has expired: skip ahead to the oldest one still
+        available rather than wait forever.
+        """
         waited = 0.0
         while not self._stop.is_set():
             seg = self._buffer.get(self.pos)
             if seg is not None and seg.data is not None:
                 return seg
             if seg is None:
+                oldest = self._buffer.oldest_seq()
+                if oldest is not None and oldest > self.pos:
+                    log.warning("segments %d-%d expired from the server; skipping ahead",
+                                self.pos, oldest - 1)
+                    self.pos = oldest
+                    continue
                 waited = 0.0  # not listed yet: we are at the live edge, keep waiting
             elif waited >= DATA_GRACE_S:
                 return seg  # listed but bytes never arrived: caller plays silence

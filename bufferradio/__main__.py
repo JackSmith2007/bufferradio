@@ -40,9 +40,15 @@ async def main(url: str, delay: float) -> None:
         playlist = await fetch_playlist(client, media_url)
         window = sum(s.duration for s in playlist.segments)
         log.info("playlist window: %.0fs (%d segments)", window, len(playlist.segments))
+        if delay > window:
+            log.warning("delay %.0fs exceeds the playlist window: the server only keeps %.0fs, "
+                        "so the effective delay will be about %.0fs", delay, window, window)
         register_playlist(playlist, buffer)
         start_seq = choose_start_seq(playlist, delay)
-        log.info("starting playback at sequence %d, %.0fs behind live", start_seq, delay)
+        buffer.evict_before(start_seq)  # older segments will never be played: don't fetch them
+        first_seq = playlist.media_sequence or 0
+        behind = sum(s.duration for s in playlist.segments[start_seq - first_seq:])
+        log.info("starting playback at sequence %d, %.0fs behind live", start_seq, behind)
 
         player = Player(buffer, start_seq)
         player.start()
@@ -77,6 +83,8 @@ def cli() -> None:
         asyncio.run(main(url, args.delay))
     except KeyboardInterrupt:
         pass
+    except httpx.HTTPError as exc:
+        sys.exit(f"could not open stream: {exc}")
 
 
 if __name__ == "__main__":
