@@ -85,6 +85,8 @@ async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: Segment
     """Poll forever, with exponential backoff while the playlist is unreachable."""
     backoff = 1.0
     failures = 0
+    down_since = 0.0
+    gaps_before = 0
     while True:
         stored_before = metrics.counts["stored"]
         try:
@@ -92,13 +94,25 @@ async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: Segment
         except (httpx.HTTPError, OSError) as exc:
             log.warning("playlist fetch failed: %s (retrying in %.1fs)", exc, backoff)
             metrics.record("playlist_error", duration_ms=backoff * 1000)
+            if failures == 0:
+                down_since = time.monotonic()
+                gaps_before = metrics.counts["gap"]
+            failures += 1
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, MAX_BACKOFF_S)
-            failures += 1
             continue
         if failures:
-            log.info("network back after %d failed poll(s); backfilled %d segment(s)",
-                     failures, metrics.counts["stored"] - stored_before)
+            # The verdict on the outage that just ended: did the listener notice?
+            down = time.monotonic() - down_since
+            backfilled = metrics.counts["stored"] - stored_before
+            gaps = metrics.counts["gap"] - gaps_before
+            if gaps == 0:
+                log.info("OUTAGE SURVIVED: network was down ~%.0fs (%d failed polls), "
+                         "%d segment(s) backfilled, playback never stopped",
+                         down, failures, backfilled)
+            else:
+                log.warning("OUTAGE EXCEEDED BUFFER: network was down ~%.0fs (%d failed polls), "
+                            "%d gap(s) of silence before it came back", down, failures, gaps)
             failures = 0
         backoff = 1.0
         target = playlist.target_duration or DEFAULT_TARGET_DURATION

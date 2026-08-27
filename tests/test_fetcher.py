@@ -118,6 +118,54 @@ def test_playlist_failure_propagates_to_the_caller() -> None:
     assert len(buf) == 0
 
 
+def test_outage_verdict_when_the_buffer_covered_it(caplog: pytest.LogCaptureFixture) -> None:
+    from bufferradio.fetcher import run_fetcher
+
+    server, buf, metrics = FakeServer(), SegmentBuffer(), Metrics(None)
+    server.playlist_down = True
+
+    async def go() -> None:
+        async with server.client() as client:
+            task = asyncio.create_task(run_fetcher(client, BASE + "index.m3u8", buf, metrics))
+            await asyncio.sleep(0.2)          # first poll fails, backoff of 1 s begins
+            server.playlist_down = False      # "network back" before the retry
+            for _ in range(50):
+                if "OUTAGE SURVIVED" in caplog.text:
+                    break
+                await asyncio.sleep(0.1)
+            task.cancel()
+
+    caplog.set_level("INFO")
+    asyncio.run(go())
+    assert "OUTAGE SURVIVED" in caplog.text
+    assert "3 segment(s) backfilled" in caplog.text
+    assert metrics.counts["playlist_error"] == 1
+
+
+def test_outage_verdict_when_silence_was_played(caplog: pytest.LogCaptureFixture) -> None:
+    from bufferradio.fetcher import run_fetcher
+
+    server, buf, metrics = FakeServer(), SegmentBuffer(), Metrics(None)
+    server.playlist_down = True
+
+    async def go() -> None:
+        async with server.client() as client:
+            task = asyncio.create_task(run_fetcher(client, BASE + "index.m3u8", buf, metrics))
+            await asyncio.sleep(0.2)
+            metrics.record("gap", 100, 10000)  # the player ran dry during the outage
+            server.playlist_down = False
+            for _ in range(50):
+                if "OUTAGE EXCEEDED BUFFER" in caplog.text:
+                    break
+                await asyncio.sleep(0.1)
+            task.cancel()
+
+    caplog.set_level("INFO")
+    asyncio.run(go())
+    assert "OUTAGE EXCEEDED BUFFER" in caplog.text
+    assert "1 gap(s) of silence" in caplog.text
+
+
 def test_select_media_playlist_picks_highest_bandwidth() -> None:
     server = FakeServer()
 

@@ -139,13 +139,18 @@ $ start-windows.bat --station cbc-radio2
 <press f>
 ... WARNING FAULT: dropping all HTTP requests for 5s
 ... WARNING playlist fetch failed: simulated outage (fault injector) (retrying in 1.0s)
-<audio keeps playing; a few seconds later the fetcher catches up>
+... WARNING playlist fetch failed: simulated outage (fault injector) (retrying in 2.0s)
+... WARNING playlist fetch failed: simulated outage (fault injector) (retrying in 4.0s)
+... INFO OUTAGE SURVIVED: network was down ~8s (3 failed polls), 1 segment(s) backfilled, playback never stopped
 <press q>
-... INFO summary: 4 segments played, 0 gaps (0.0s silence), 6 downloaded, 1 playlist errors, 1 faults injected -> metrics.csv
+... INFO summary: 4 segments played, 0 gaps (0.0s silence), 6 downloaded, 3 playlist errors, 1 faults injected -> metrics.csv
 ```
 
-An outage longer than the delay *will* produce audible silence, and that is
-recorded too: `gap` rows in the CSV and a non-zero silence total in the summary.
+The audio never changed: the player was working through audio it had already
+downloaded, and the missed segment was fetched again before playback reached
+it. The verdict line is the proof. An outage longer than the buffer produces
+the other verdict — `OUTAGE EXCEEDED BUFFER: ... 2 gap(s) of silence` — plus
+`gap` rows in the CSV and a non-zero silence total in the summary.
 
 The fetcher polls every 5 s (half the segment duration), so a 5 s outage can
 fall entirely between two polls and fail no request at all. For a guaranteed
