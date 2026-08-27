@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import httpx
 import m3u8
 
 from .buffer import SegmentBuffer
+from .metrics import Metrics
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +48,8 @@ def register_playlist(playlist: m3u8.M3U8, buffer: SegmentBuffer) -> dict[int, s
     return urls
 
 
-async def poll_once(client: httpx.AsyncClient, media_url: str, buffer: SegmentBuffer) -> m3u8.M3U8:
+async def poll_once(client: httpx.AsyncClient, media_url: str, buffer: SegmentBuffer,
+                    metrics: Metrics) -> m3u8.M3U8:
     """One fetch cycle: read the playlist, then download every listed segment we lack.
 
     "Download everything listed that we don't have yet" is also the backfill
@@ -64,6 +67,7 @@ async def poll_once(client: httpx.AsyncClient, media_url: str, buffer: SegmentBu
         seg = buffer.get(seq)
         if seg is None or seg.data is not None:
             continue
+        started = time.monotonic()
         try:
             resp = await client.get(urls[seq])
             resp.raise_for_status()
@@ -71,18 +75,21 @@ async def poll_once(client: httpx.AsyncClient, media_url: str, buffer: SegmentBu
             log.warning("segment %d download failed: %s", seq, exc)
             continue
         buffer.store(seq, resp.content)
+        metrics.record("stored", seq, (time.monotonic() - started) * 1000)
         log.debug("stored segment %d (%d bytes)", seq, len(resp.content))
     return playlist
 
 
-async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: SegmentBuffer) -> None:
+async def run_fetcher(client: httpx.AsyncClient, media_url: str, buffer: SegmentBuffer,
+                      metrics: Metrics) -> None:
     """Poll forever, with exponential backoff while the playlist is unreachable."""
     backoff = 1.0
     while True:
         try:
-            playlist = await poll_once(client, media_url, buffer)
+            playlist = await poll_once(client, media_url, buffer, metrics)
         except (httpx.HTTPError, OSError) as exc:
             log.warning("playlist fetch failed: %s (retrying in %.1fs)", exc, backoff)
+            metrics.record("playlist_error", duration_ms=backoff * 1000)
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, MAX_BACKOFF_S)
             continue

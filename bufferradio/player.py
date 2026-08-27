@@ -9,6 +9,7 @@ import threading
 import sounddevice as sd
 
 from .buffer import Segment, SegmentBuffer
+from .metrics import Metrics
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ BYTES_PER_FRAME = CHANNELS * 2  # s16le
 # and playing silence in its place.
 DATA_GRACE_S = 2.0
 POLL_S = 0.2
+
+CHUNK_S = 0.25  # audio handed to the device per write; bounds stop() latency
+CHUNK_BYTES = int(CHUNK_S * SAMPLE_RATE) * BYTES_PER_FRAME
 
 
 def decode(data: bytes) -> bytes | None:
@@ -51,9 +55,10 @@ class Player(threading.Thread):
     sleep-based timing is needed.
     """
 
-    def __init__(self, buffer: SegmentBuffer, start_seq: int) -> None:
+    def __init__(self, buffer: SegmentBuffer, start_seq: int, metrics: Metrics) -> None:
         super().__init__(name="player", daemon=True)
         self._buffer = buffer
+        self._metrics = metrics
         self.pos = start_seq
         self._stop = threading.Event()
 
@@ -67,7 +72,7 @@ class Player(threading.Thread):
             while not self._stop.is_set():
                 self._play_next(stream)
         finally:
-            stream.stop()
+            stream.abort()  # discard queued audio: quit immediately, don't drain
             stream.close()
 
     def _play_next(self, stream: sd.RawOutputStream) -> None:
@@ -77,8 +82,17 @@ class Player(threading.Thread):
         pcm = decode(seg.data) if seg.data is not None else None
         if pcm is None:
             log.warning("gap: playing %.1fs of silence for segment %d", seg.duration, seg.seq)
+            self._metrics.record("gap", seg.seq, seg.duration * 1000)
             pcm = silence(seg.duration)
-        stream.write(pcm)
+        else:
+            self._metrics.record("played", seg.seq, seg.duration * 1000)
+        # Write in short chunks so stop() takes effect within CHUNK_S rather
+        # than after a whole segment; join() must not time out at shutdown,
+        # or the process would exit while this thread is inside PortAudio.
+        for i in range(0, len(pcm), CHUNK_BYTES):
+            if self._stop.is_set():
+                return
+            stream.write(pcm[i:i + CHUNK_BYTES])
         self.pos += 1
         self._buffer.evict_before(self.pos)  # played segments are never needed again
 
@@ -101,6 +115,7 @@ class Player(threading.Thread):
                 if oldest is not None and oldest > self.pos:
                     log.warning("segments %d-%d expired from the server; skipping ahead",
                                 self.pos, oldest - 1)
+                    self._metrics.record("skip", self.pos)
                     self.pos = oldest
                     continue
                 waited = 0.0  # not listed yet: we are at the live edge, keep waiting

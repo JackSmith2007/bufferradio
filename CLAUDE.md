@@ -68,6 +68,7 @@ python -m bufferradio                                # interactive station picke
 
 - M1: plays stream at configured delay, station presets + picker. **Done**
   (audio acceptance passed 2026-08-26 on cbc-radio2, ffmpeg 9.0.1).
-- M2: backfill hardening, eviction, playlist-window warning. Not started.
-- M3: fault injector (`f` key) + metrics.csv. Not started.
+- M2: backfill hardening, eviction, playlist-window warning. **Done.**
+- M3: fault injector (`f` key) + metrics.csv. **Done** (verified: 5 s
+  outage at 20 s delay recovers with zero gaps).
 - M4: unit tests (fake fetcher, no network) + README. Not started.
