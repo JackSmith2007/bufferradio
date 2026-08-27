@@ -35,8 +35,14 @@ echo Checking dependencies...
 "%VPY%" -m pip install -q --disable-pip-version-check -r requirements.txt || goto :fail
 
 rem --- 3. play -------------------------------------------------------------
+rem Double-clicked (no arguments): open the web page. Otherwise pass the
+rem arguments through, e.g.  start-windows.bat --station fip
 echo.
-"%VPY%" run.py %*
+if "%~1"=="" (
+    "%VPY%" run.py --web
+) else (
+    "%VPY%" run.py %*
+)
 if errorlevel 1 goto :fail
 exit /b 0
 

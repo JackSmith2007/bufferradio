@@ -44,5 +44,10 @@ echo "Checking dependencies..."
     || fail "Could not install dependencies - see the messages above."
 
 # --- 3. play ------------------------------------------------------------------
+# Double-clicked (no arguments): open the web page. Otherwise pass the
+# arguments through, e.g.  ./start-mac.command --station fip
 echo
+if [ $# -eq 0 ]; then
+    set -- --web
+fi
 .venv/bin/python run.py "$@" || fail "Something went wrong - see the messages above."

@@ -24,33 +24,27 @@ logged to `metrics.csv`.
 The launcher does everything else: it finds Python (or installs it on
 Windows), creates a private environment inside the folder, installs the
 dependencies — including a copy of ffmpeg, so there is nothing to install by
-hand — and starts the player. The first run takes about a minute; after that
-it starts in a couple of seconds.
+hand — and opens the control page in your browser. The first run takes about
+a minute; after that it opens in a couple of seconds.
 
-**Step 3 — pick a station** by typing its number and pressing Enter. The radio
-plays 20 seconds behind live. While it plays:
-
-| Key | Action |
-| --- | --- |
-| `f` | inject an outage: every network request fails for 5 seconds — the music keeps playing |
-| `q` | quit (a one-line summary is printed) |
-
-**Prefer a web page to a terminal?** Run the launcher with `--web`
-(`start-windows.bat --web` / `./start-mac.command --web`, or
-`bufferradio.exe --web`). It opens http://127.0.0.1:8765 in your browser: a
-station dropdown, a delay box, and Start / Stop / Inject-outage buttons, with
-the live status and log underneath. It is a control panel — the audio still
-plays on the computer running it.
+**Step 3 — on the page** (http://127.0.0.1:8765), pick a station and click
+**Start**. The radio plays 20 seconds behind live, out of the computer's
+speakers. Click **Inject 5s outage** — every network request fails for five
+seconds and the music keeps playing; the log underneath shows the failure and
+then `network back ... backfilled`. **Stop** ends playback. Closing the black
+terminal window that opened alongside the browser quits the program.
 
 **Windows alternative:** download
 [bufferradio.exe](https://github.com/JackSmith2007/bufferradio/releases/latest/download/bufferradio.exe)
 from the latest release — a single file with Python and ffmpeg inside, no
-setup at all. It isn't code-signed, so if SmartScreen says "Windows protected
-your PC", click **More info → Run anyway**.
+setup at all; double-click it and the same page opens. It isn't code-signed,
+so if SmartScreen says "Windows protected your PC", click **More info → Run
+anyway**.
 
-## Options
+## Terminal mode and options
 
-The launchers pass any arguments through, so from a terminal:
+Run a launcher (or the exe) with arguments and it plays in the terminal
+instead of opening the web page:
 
 ```
 start-windows.bat --station fip --delay 25        (Windows)
@@ -58,11 +52,13 @@ start-windows.bat --station fip --delay 25        (Windows)
 bufferradio.exe --station fip --delay 25          (the exe)
 ```
 
+In the terminal, press `f` to inject an outage and `q` (or `Ctrl+C`) to quit.
+
 | Option | Meaning |
 | --- | --- |
 | `--station NAME` | play a preset (`cbc-radio2`, `cbc-radio1-toronto`, `fip`, `france-inter`, `franceinfo`) |
 | `--url URL` | play any HLS master or media playlist |
-| `--web` | control playback from a page at http://127.0.0.1:8765 instead of the terminal |
+| `--web` | open the control page at http://127.0.0.1:8765 (what a double-click does) |
 | `--delay S` | seconds behind live (default 20) |
 | `--fault-seconds S` | length of the outage injected by the `f` key (default 5) |
 | `--metrics-file PATH` | CSV to append events to (default `metrics.csv`) |

@@ -9,6 +9,9 @@ import traceback
 
 from bufferradio.__main__ import cli
 
+if getattr(sys, "frozen", False) and len(sys.argv) == 1:
+    sys.argv.append("--web")  # the exe was double-clicked: open the web page
+
 try:
     cli()
     code = 0
