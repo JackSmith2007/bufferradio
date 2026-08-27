@@ -6,7 +6,6 @@ import _thread
 import argparse
 import asyncio
 import logging
-import shutil
 import sys
 from pathlib import Path
 
@@ -15,6 +14,7 @@ import httpx
 from .buffer import SegmentBuffer
 from .faults import FaultInjector, FaultyTransport, start_key_listener
 from .fetcher import fetch_playlist, register_playlist, run_fetcher, select_media_playlist
+from .ffmpeg_setup import ensure_ffmpeg
 from .metrics import Metrics
 from .player import Player
 from .stations import STATIONS, pick_station
@@ -93,13 +93,10 @@ def cli() -> None:
                         help="CSV file to append events to (default: metrics.csv)")
     args = parser.parse_args()
 
-    if shutil.which("ffmpeg") is None:
-        sys.exit("ffmpeg not found on PATH. Install it with:\n"
-                 "  winget install --id Gyan.FFmpeg -e\n"
-                 "then restart the terminal.")
-
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # per-request lines are noise
+    if not ensure_ffmpeg():
+        sys.exit(1)  # reason already logged
     url = args.url or (STATIONS[args.station] if args.station else pick_station())
     metrics = Metrics(args.metrics_file)
     try:

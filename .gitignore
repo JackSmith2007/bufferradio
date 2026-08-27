@@ -3,4 +3,7 @@
 __pycache__/
 *.pyc
 metrics.csv
+build/
+dist/
+*.spec
 CLAUDE.md

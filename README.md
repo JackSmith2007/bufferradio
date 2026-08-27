@@ -1,33 +1,36 @@
 # bufferradio
 
-A small Python command-line player for live internet radio (HLS) that plays
-the stream a configurable number of seconds **behind** the live edge.
+Live internet radio that keeps playing through network hiccups.
 
-Because playback deliberately lags live, short network outages are inaudible:
-the segments that were missed during the outage are still on the server, and
-they are re-downloaded before playback reaches them. You can prove this to
-yourself with the built-in fault injector (press `f`), and every download, play,
-gap and outage is logged to `metrics.csv`.
+bufferradio plays an HLS radio stream a configurable number of seconds
+**behind** the live edge. Because playback deliberately lags live, a short
+outage is inaudible: the audio that was missed is still on the server, and it
+is re-downloaded before playback reaches it. Press `f` to simulate an outage
+and hear (nothing) for yourself; every download, play, gap and outage is
+logged to `metrics.csv`.
+
+## Try it (Windows, nothing to install)
+
+1. Download **[bufferradio.exe](https://github.com/JackSmith2007/bufferradio/releases/latest/download/bufferradio.exe)**
+   from the latest release.
+2. Double-click it. Pick a station from the menu.
+
+That's it. On the first run it fetches a copy of ffmpeg (about 67 MB, one time,
+stored in `%LOCALAPPDATA%\bufferradio`); after that it starts instantly.
+
+Because the exe is not code-signed, Windows SmartScreen may show
+"Windows protected your PC" — click **More info → Run anyway**.
+
+To pass options, run it from a terminal instead:
 
 ```
-python -m bufferradio --station cbc-radio2            # a verified preset, 20 s behind live
-python -m bufferradio --url <hls_url> --delay 25      # any HLS master or media playlist
-python -m bufferradio                                 # interactive station picker
+bufferradio.exe --station fip --delay 25
 ```
 
-## Requirements
+## Run from source (any OS)
 
-- Python 3.12 or newer
-- [ffmpeg](https://ffmpeg.org/) on your `PATH` (used to decode each segment)
-  - Windows: `winget install --id Gyan.FFmpeg -e`, then open a **new** terminal
-  - macOS: `brew install ffmpeg`
-  - Debian/Ubuntu: `sudo apt install ffmpeg libportaudio2`
-- An audio output device
-
-Developed and tested on Windows 11; the code has no Windows-only dependencies
-(on other platforms the `f`/`q` keys are read line-by-line, see below).
-
-## Setup
+Needs Python 3.12+. On Windows ffmpeg is downloaded automatically; on macOS
+or Linux install it first (`brew install ffmpeg` / `sudo apt install ffmpeg libportaudio2`).
 
 ```powershell
 git clone https://github.com/JackSmith2007/bufferradio.git
@@ -35,10 +38,8 @@ cd bufferradio
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1             # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt          # httpx, m3u8, sounddevice
-python -m bufferradio --station cbc-radio2
+python run.py --station cbc-radio2       # or: python -m bufferradio ...
 ```
-
-For the tests, also `pip install -r requirements-dev.txt` (adds pytest).
 
 ## Usage
 
@@ -59,8 +60,8 @@ While playing:
 | `f` | inject an outage: every HTTP request fails for `--fault-seconds` |
 | `q` or `Ctrl+C` | quit (a summary line is printed) |
 
-In a real Windows console keys take effect as soon as they are pressed. In an
-IDE run window (which is not a console) type the key and press Enter.
+In a real console keys take effect as soon as they are pressed. In an IDE run
+window (which is not a console) type the key and press Enter.
 
 The delay cannot exceed what the server keeps in its playlist window (about
 30 s for the presets). Asking for more prints a warning and uses the window
@@ -118,11 +119,15 @@ increasing *media sequence numbers*.
    while tripped every request raises `ConnectError`, exactly what a real
    outage looks like. Nothing else in the program knows faults exist.
 6. **Metrics** (`metrics.py`). One CSV row per event, plus a summary on exit.
+7. **ffmpeg** (`ffmpeg_setup.py`). ffmpeg is the one dependency pip can't
+   install. If it isn't on `PATH`, a static build is downloaded once into the
+   user's app-data folder and that folder is put on this process's `PATH`;
+   the rest of the program just calls `ffmpeg`.
 
 ### Trying the fault injector
 
 ```
-$ python -m bufferradio --station cbc-radio2
+$ bufferradio --station cbc-radio2
 ... INFO selected variant: 192000 bps
 ... INFO playlist window: 30s (3 segments)
 ... INFO starting playback at sequence 246783, 30s behind live
@@ -164,29 +169,38 @@ timestamp,event_type,sequence,duration_ms
 
 The file is appended to across runs (`.gitignore`d).
 
-## Tests
+## Development
 
 ```powershell
-python -m pytest
+pip install -r requirements-dev.txt      # + pytest, pyinstaller
+python -m pytest                         # ~40 tests, <1 s, no network or audio device needed
 ```
 
-The tests need no network and no audio device: the fetcher runs against an
-in-memory fake HLS server (`httpx.MockTransport`), and the player writes to a
-fake output stream. Two decode tests use `ffmpeg` and are skipped if it is not
-installed.
+The fetcher tests run against an in-memory fake HLS server
+(`httpx.MockTransport`), the player writes to a fake output stream, and the
+ffmpeg downloader unpacks an in-memory zip. Two decode tests use a real
+`ffmpeg` and are skipped if it is not installed.
+
+To build the standalone Windows exe (`dist\bufferradio.exe`):
+
+```powershell
+python -m PyInstaller --onefile --name bufferradio --clean run.py
+```
 
 ## Project layout
 
 ```
+run.py              launcher (source runs and the PyInstaller entry point)
 bufferradio/
-  __main__.py   CLI, startup, wiring, shutdown
-  fetcher.py    playlist polling + segment download (asyncio, httpx, m3u8)
-  buffer.py     SegmentBuffer: thread-safe, keyed by media sequence number
-  player.py     playback thread: ffmpeg decode -> sounddevice
-  faults.py     FaultInjector, FaultyTransport, key listener
-  metrics.py    CSV event log + summary
-  stations.py   verified presets + terminal picker
-tests/          pytest suite (no network)
+  __main__.py       CLI, startup, wiring, shutdown
+  fetcher.py        playlist polling + segment download (asyncio, httpx, m3u8)
+  buffer.py         SegmentBuffer: thread-safe, keyed by media sequence number
+  player.py         playback thread: ffmpeg decode -> sounddevice
+  faults.py         FaultInjector, FaultyTransport, key listener
+  metrics.py        CSV event log + summary
+  ffmpeg_setup.py   find ffmpeg, or download it once on Windows
+  stations.py       verified presets + terminal picker
+tests/              pytest suite (no network)
 ```
 
 ## Limitations
@@ -196,3 +210,10 @@ tests/          pytest suite (no network)
 - Segment granularity is coarse (10 s for the presets): if a segment's bytes
   haven't arrived 2 s after playback reaches it, the whole segment is silence.
 - Only the highest-bandwidth variant is used; there is no adaptive switching.
+- The prebuilt exe and the automatic ffmpeg download are Windows-only; other
+  platforms run from source with a system ffmpeg.
+
+## License
+
+MIT. The automatically downloaded ffmpeg is an LGPL build from
+[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
