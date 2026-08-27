@@ -17,20 +17,28 @@ python -m bufferradio                                 # interactive station pick
 
 ## Requirements
 
-- Windows 11 (developed and tested there; the code itself is portable)
-- Python 3.12+ (developed on 3.14)
-- [ffmpeg](https://ffmpeg.org/) on `PATH`: `winget install --id Gyan.FFmpeg -e`,
-  then open a new terminal
+- Python 3.12 or newer
+- [ffmpeg](https://ffmpeg.org/) on your `PATH` (used to decode each segment)
+  - Windows: `winget install --id Gyan.FFmpeg -e`, then open a **new** terminal
+  - macOS: `brew install ffmpeg`
+  - Debian/Ubuntu: `sudo apt install ffmpeg libportaudio2`
 - An audio output device
+
+Developed and tested on Windows 11; the code has no Windows-only dependencies
+(on other platforms the `f`/`q` keys are read line-by-line, see below).
 
 ## Setup
 
 ```powershell
+git clone https://github.com/JackSmith2007/bufferradio.git
+cd bufferradio
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1             # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt          # httpx, m3u8, sounddevice
-pip install -r requirements-dev.txt      # + pytest, only for running the tests
+python -m bufferradio --station cbc-radio2
 ```
+
+For the tests, also `pip install -r requirements-dev.txt` (adds pytest).
 
 ## Usage
 
