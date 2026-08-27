@@ -1,2 +1,5 @@
 # Normalise line endings: LF in the repo, native on checkout.
 * text=auto
+# Launchers must keep the endings their interpreter expects, on every OS.
+*.command text eol=lf
+*.bat text eol=crlf

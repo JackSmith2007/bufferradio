@@ -14,7 +14,7 @@ import httpx
 from .buffer import SegmentBuffer
 from .faults import FaultInjector, FaultyTransport, start_key_listener
 from .fetcher import fetch_playlist, register_playlist, run_fetcher, select_media_playlist
-from .ffmpeg_setup import ensure_ffmpeg
+from .ffmpeg_setup import ffmpeg_exe
 from .metrics import Metrics
 from .player import Player
 from .stations import STATIONS, pick_station
@@ -95,8 +95,10 @@ def cli() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # per-request lines are noise
-    if not ensure_ffmpeg():
-        sys.exit(1)  # reason already logged
+    try:
+        log.debug("ffmpeg: %s", ffmpeg_exe())  # fail fast, before any audio starts
+    except RuntimeError as exc:
+        sys.exit(str(exc))
     url = args.url or (STATIONS[args.station] if args.station else pick_station())
     metrics = Metrics(args.metrics_file)
     try:

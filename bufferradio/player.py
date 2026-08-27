@@ -9,6 +9,7 @@ import threading
 import sounddevice as sd
 
 from .buffer import Segment, SegmentBuffer
+from .ffmpeg_setup import ffmpeg_exe
 from .metrics import Metrics
 
 log = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def decode(data: bytes) -> bytes | None:
     never has to be reconfigured mid-playback.
     """
     proc = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", "pipe:0",
+        [ffmpeg_exe(), "-v", "error", "-i", "pipe:0",
          "-f", "s16le", "-ar", str(SAMPLE_RATE), "-ac", str(CHANNELS), "pipe:1"],
         input=data, capture_output=True,
     )

@@ -1,9 +1,8 @@
-"""Player tests with a fake output stream; ffmpeg is only needed for the decode test."""
+"""Player tests with a fake output stream; only the decode tests run a real ffmpeg."""
 
 from __future__ import annotations
 
 import io
-import shutil
 import wave
 
 import pytest
@@ -107,7 +106,6 @@ def test_writes_in_chunks_and_stops_between_them(no_ffmpeg: None) -> None:
     assert player.pos == 1  # interrupted: not counted as played
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
 def test_decode_resamples_to_48k_stereo() -> None:
     # 0.5 s of 44.1 kHz mono: output must be resampled to the fixed device format.
     src = io.BytesIO()
@@ -123,7 +121,5 @@ def test_decode_resamples_to_48k_stereo() -> None:
 
 
 def test_decode_failure_returns_none(caplog: pytest.LogCaptureFixture) -> None:
-    if shutil.which("ffmpeg") is None:
-        pytest.skip("ffmpeg not on PATH")
     assert decode(b"this is not audio") is None
     assert "decode failed" in caplog.text

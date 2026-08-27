@@ -9,39 +9,47 @@ is re-downloaded before playback reaches it. Press `f` to simulate an outage
 and hear (nothing) for yourself; every download, play, gap and outage is
 logged to `metrics.csv`.
 
-## Try it (Windows, nothing to install)
+## Run it
 
-1. Download **[bufferradio.exe](https://github.com/JackSmith2007/bufferradio/releases/latest/download/bufferradio.exe)**
-   from the latest release.
-2. Double-click it. Pick a station from the menu.
+**Step 1 — get the files.** Click the green **Code** button above, choose
+**Download ZIP**, and unzip it anywhere.
 
-That's it. On the first run it fetches a copy of ffmpeg (about 67 MB, one time,
-stored in `%LOCALAPPDATA%\bufferradio`); after that it starts instantly.
+**Step 2 — double-click the launcher for your computer:**
 
-Because the exe is not code-signed, Windows SmartScreen may show
-"Windows protected your PC" — click **More info → Run anyway**.
+| | |
+| --- | --- |
+| Windows | **`start-windows.bat`** |
+| Mac | **`start-mac.command`** — the first time, right-click it and choose **Open** (macOS asks once because the file came from the internet) |
 
-To pass options, run it from a terminal instead:
+The launcher does everything else: it finds Python (or installs it on
+Windows), creates a private environment inside the folder, installs the
+dependencies — including a copy of ffmpeg, so there is nothing to install by
+hand — and starts the player. The first run takes about a minute; after that
+it starts in a couple of seconds.
+
+**Step 3 — pick a station** by typing its number and pressing Enter. The radio
+plays 20 seconds behind live. While it plays:
+
+| Key | Action |
+| --- | --- |
+| `f` | inject an outage: every network request fails for 5 seconds — the music keeps playing |
+| `q` | quit (a one-line summary is printed) |
+
+**Windows alternative:** download
+[bufferradio.exe](https://github.com/JackSmith2007/bufferradio/releases/latest/download/bufferradio.exe)
+from the latest release — a single file with Python and ffmpeg inside, no
+setup at all. It isn't code-signed, so if SmartScreen says "Windows protected
+your PC", click **More info → Run anyway**.
+
+## Options
+
+The launchers pass any arguments through, so from a terminal:
 
 ```
-bufferradio.exe --station fip --delay 25
+start-windows.bat --station fip --delay 25        (Windows)
+./start-mac.command --station fip --delay 25      (Mac)
+bufferradio.exe --station fip --delay 25          (the exe)
 ```
-
-## Run from source (any OS)
-
-Needs Python 3.12+. On Windows ffmpeg is downloaded automatically; on macOS
-or Linux install it first (`brew install ffmpeg` / `sudo apt install ffmpeg libportaudio2`).
-
-```powershell
-git clone https://github.com/JackSmith2007/bufferradio.git
-cd bufferradio
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1             # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt          # httpx, m3u8, sounddevice
-python run.py --station cbc-radio2       # or: python -m bufferradio ...
-```
-
-## Usage
 
 | Option | Meaning |
 | --- | --- |
@@ -51,17 +59,9 @@ python run.py --station cbc-radio2       # or: python -m bufferradio ...
 | `--fault-seconds S` | length of the outage injected by the `f` key (default 5) |
 | `--metrics-file PATH` | CSV to append events to (default `metrics.csv`) |
 
-With neither `--station` nor `--url`, a numbered menu of presets is shown.
-
-While playing:
-
-| Key | Action |
-| --- | --- |
-| `f` | inject an outage: every HTTP request fails for `--fault-seconds` |
-| `q` or `Ctrl+C` | quit (a summary line is printed) |
-
-In a real console keys take effect as soon as they are pressed. In an IDE run
-window (which is not a console) type the key and press Enter.
+With neither `--station` nor `--url`, the station menu is shown. `Ctrl+C`
+also quits. In an IDE run window (which is not a real console) type the key
+and press Enter.
 
 The delay cannot exceed what the server keeps in its playlist window (about
 30 s for the presets). Asking for more prints a warning and uses the window
@@ -119,15 +119,15 @@ increasing *media sequence numbers*.
    while tripped every request raises `ConnectError`, exactly what a real
    outage looks like. Nothing else in the program knows faults exist.
 6. **Metrics** (`metrics.py`). One CSV row per event, plus a summary on exit.
-7. **ffmpeg** (`ffmpeg_setup.py`). ffmpeg is the one dependency pip can't
-   install. If it isn't on `PATH`, a static build is downloaded once into the
-   user's app-data folder and that folder is put on this process's `PATH`;
-   the rest of the program just calls `ffmpeg`.
+7. **ffmpeg** (`ffmpeg_setup.py`). ffmpeg is the one dependency that isn't
+   Python, so it comes from `imageio-ffmpeg`, a pip package whose only job is
+   to ship a prebuilt ffmpeg binary for the current OS. A system ffmpeg on
+   `PATH` is the fallback.
 
 ### Trying the fault injector
 
 ```
-$ bufferradio --station cbc-radio2
+$ start-windows.bat --station cbc-radio2
 ... INFO selected variant: 192000 bps
 ... INFO playlist window: 30s (3 segments)
 ... INFO starting playback at sequence 246783, 30s behind live
@@ -171,26 +171,32 @@ The file is appended to across runs (`.gitignore`d).
 
 ## Development
 
+Running from a terminal without the launcher:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1             # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt          # httpx, m3u8, sounddevice, imageio-ffmpeg
+python run.py --station cbc-radio2       # or: python -m bufferradio ...
+```
+
+Tests and the Windows exe:
+
 ```powershell
 pip install -r requirements-dev.txt      # + pytest, pyinstaller
-python -m pytest                         # ~40 tests, <1 s, no network or audio device needed
+python -m pytest                         # 38 tests, <1 s, no network or audio device needed
+python -m PyInstaller --onefile --name bufferradio --clean run.py   # -> dist\bufferradio.exe
 ```
 
 The fetcher tests run against an in-memory fake HLS server
-(`httpx.MockTransport`), the player writes to a fake output stream, and the
-ffmpeg downloader unpacks an in-memory zip. Two decode tests use a real
-`ffmpeg` and are skipped if it is not installed.
-
-To build the standalone Windows exe (`dist\bufferradio.exe`):
-
-```powershell
-python -m PyInstaller --onefile --name bufferradio --clean run.py
-```
+(`httpx.MockTransport`) and the player writes to a fake output stream.
 
 ## Project layout
 
 ```
-run.py              launcher (source runs and the PyInstaller entry point)
+start-windows.bat   double-click launcher (Windows)
+start-mac.command   double-click launcher (macOS / Linux)
+run.py              entry point for source runs and the PyInstaller exe
 bufferradio/
   __main__.py       CLI, startup, wiring, shutdown
   fetcher.py        playlist polling + segment download (asyncio, httpx, m3u8)
@@ -198,7 +204,7 @@ bufferradio/
   player.py         playback thread: ffmpeg decode -> sounddevice
   faults.py         FaultInjector, FaultyTransport, key listener
   metrics.py        CSV event log + summary
-  ffmpeg_setup.py   find ffmpeg, or download it once on Windows
+  ffmpeg_setup.py   locate the bundled (or system) ffmpeg
   stations.py       verified presets + terminal picker
 tests/              pytest suite (no network)
 ```
@@ -210,10 +216,10 @@ tests/              pytest suite (no network)
 - Segment granularity is coarse (10 s for the presets): if a segment's bytes
   haven't arrived 2 s after playback reaches it, the whole segment is silence.
 - Only the highest-bandwidth variant is used; there is no adaptive switching.
-- The prebuilt exe and the automatic ffmpeg download are Windows-only; other
-  platforms run from source with a system ffmpeg.
+- Developed and tested on Windows; the Mac launcher follows the same steps
+  but has not been run on a Mac.
 
 ## License
 
-MIT. The automatically downloaded ffmpeg is an LGPL build from
-[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
+MIT. The bundled ffmpeg comes from the
+[imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) package (LGPL build).
